@@ -1,0 +1,121 @@
+#libraries
+library(tidyverse)
+library(keras)
+library(caret)
+library(corrplot)
+library(randomForest)
+library(rpart)
+library(kableExtra)
+library(modelr)
+library(ggthemes)
+library(scales)
+
+#uploading the data
+getwd()
+
+gradschool_admissions <- read.csv("adm_data.csv")
+
+#testing
+glimpse(gradschool_admissions)
+
+summary(gradschool_admissions)
+
+#create new tab and rename the columns
+gradschool_admissions1 <- gradschool_admissions[2-3]
+summary(gradschool_admissions1)
+
+names(gradschool_admissions1)[1] <- "GRE_Score"
+names(gradschool_admissions1)[2] <- "TOEFL_Score"
+names(gradschool_admissions1)[3] <- "University_Rating"
+names(gradschool_admissions1)[8] <- "Admission_Probability"
+
+glimpse(gradschool_admissions1)
+
+summary(gradschool_admissions1)
+
+#most important Predictors and Creating the corrplot
+numericVars <- which(sapply(gradschool_admissions1, is.numeric))
+
+all_numVar <- gradschool_admissions1[, numericVars]
+cor_numVar <- cor(all_numVar, use = "pairwise.complete.obs")
+
+#sort on decreasing correlations with Admission Probability
+cor_sorted <- as.matrix(sort(cor_numVar[, "Admission_Probability"], decreasing = TRUE))
+
+#selecting high correlations
+Cor_High <- names(which(apply(cor_sorted, 1, function(x) abs(x) > 0.25)))
+cor_numVar <- cor_numVar[Cor_High, Cor_High]
+
+corrplot.mixed(cor_numVar, tl.col = "black", tl.pos = "lt")
+
+#visualizing the biggest relatable variable with the variable to be predicted.
+ggplot(gradschool_admissions1, aes(x = CGPA, y = Admission_Probability)) + geom_point(col = "orchid") + labs(x = "\n CGPA \n", y = "Probability of Admission")  + labs(title = "College GPA vs Admission Probability") + geom_smooth(method = "lm", se = FALSE, col = "red")
+
+#creating the Machine Learning Model
+index <- 1:200
+
+training <- gradschool_admissions1[index,]
+testing <- gradschool_admissions1[-index,]
+
+glimpse(training)
+
+glimpse(testing)
+
+training %>%
+  mutate_at(vars(-Admission_Probability), scale) -> training
+
+testing %>%
+  mutate_at(vars(-Admission_Probability), scale) -> testing
+
+#creating a Linear Regression Model
+
+##LM model
+fit_lm <- lm(Admission_Probability~., data = training)
+
+summary(fit_lm)
+
+##GLM model
+
+fit_glm <- glm(Admission_Probability~., data = training, family = "binomial")
+
+fit_glm
+
+summary(fit_glm)
+
+#making predictions
+
+##for LM model
+predict_lm <- predict(fit_lm, newdata = testing)
+print(head(predict_lm))
+
+###printing the MAE (Mean Absolute Error)
+MAE_lm <- sum(abs(predict_lm - testing$Admission_Probability))/200
+print(MAE_lm)
+
+##for GLM model
+
+predict_glm <- predict(fit_glm, data = testing, type = "response")
+print(head(predict_glm))
+
+###printing the MAE (Mean Absolute Error)
+MAE_glm <- sum(abs(predict_glm - testing$Admission_Probability))/200
+print(MAE_glm)
+
+#using regression part
+
+fit_rpart <- rpart(Admission_Probability~., training)
+summary(fit_rpart)
+
+##using the model to predict
+pred_rpart <- predict(fit_rpart, testing)
+print(head(pred_rpart))
+
+##finding the Mean Absolute Error
+MAE_rpart <- sum(abs(pred_rpart - testing$Admission_Probability))/200
+print(MAE_rpart)
+
+#decision tree
+
+library(rattle)
+
+fancyRpartPlot(fit_rpart, main = "Admission Data Tree Graph")
